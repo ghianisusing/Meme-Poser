@@ -7,12 +7,22 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+import pose_samples
+from pose_samples import ramp
+
 mp_pose = mp.solutions.pose
 PL = mp_pose.PoseLandmark
+mp_drawing = mp.solutions.drawing_utils
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 POSES_DIR = os.path.join(SCRIPT_DIR, "poses")
+SAMPLES_DIR = os.path.join(POSES_DIR, "samples")
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+
+# Record mode settings
+COUNTDOWN_SECONDS = 3  # time to get into the pose
+RECORD_SECONDS = 3  # time spent saving examples
+MIN_SAMPLES = 20  # fewer clear frames than this means the recording failed
 
 # Matching settings
 MIN_VISIBILITY = 0.5  # ignore body points MediaPipe isn't sure it can see
@@ -79,14 +89,6 @@ def angle(a, b, c):
     return math.degrees(math.acos(max(-1.0, min(1.0, cos))))
 
 
-def ramp(value, bad, good):
-    """0 at `bad`, 1 at `good`, linear in between (works in either direction)."""
-    if bad == good:
-        return 1.0 if value == good else 0.0
-    t = (value - bad) / (good - bad)
-    return max(0.0, min(1.0, t))
-
-
 # -----------------------------
 # Pose detectors
 # Each returns a score from 0 (not this pose) to 1 (clearly this pose).
@@ -118,16 +120,24 @@ def score_hands_behind_head(body):
     return min(scores)
 
 
-# Pose name (image file name without extension) -> scoring function.
-# Images in poses/ without a detector still show in the gallery.
+# Pose name (image file name without extension) -> hand-written scoring function.
+# Poses can also be recognized from recorded examples (press r in the game).
 DETECTORS = {
     "hands_behind_head": score_hands_behind_head,
 }
 
 
-def score_poses(landmarks, w, h):
+def score_poses(landmarks, w, h, samples=None):
+    """Score every known pose. A pose with both a hand-written rule and
+    recorded examples gets whichever score is higher."""
     body = Body(landmarks, w, h)
-    return {name: detector(body) for name, detector in DETECTORS.items()}
+    scores = {name: detector(body) for name, detector in DETECTORS.items()}
+    if samples:
+        vec = pose_samples.normalize(landmarks, w, h, MIN_VISIBILITY)
+        if vec is not None:
+            for name, examples in samples.items():
+                scores[name] = max(scores.get(name, 0.0), pose_samples.score(vec, examples))
+    return scores
 
 
 class PoseTracker:
@@ -247,9 +257,11 @@ def draw_check(frame, cx, cy, r):
     cv2.polylines(frame, [pts], False, WHITE, max(2, r // 4), cv2.LINE_AA)
 
 
-def draw_tile(frame, image, name, x, y, tw, th, state, found, label_scale):
+def draw_tile(frame, image, name, x, y, tw, th, state, found, label_scale, ready=True, number=None):
     """Draw one meme thumbnail with its name underneath.
-    state: "matched", "holding" or None."""
+    state: "matched", "holding" or None.
+    ready: False when the game can't recognize this pose yet.
+    number: shown in the corner while choosing a pose to record."""
     text_h = cv2.getTextSize("Ag", FONT, label_scale, 1)[0][1]
     show_label = tw >= 70 and th * 0.22 >= text_h + 4
     label_h = int(th * 0.22) if show_label else 0
@@ -278,6 +290,23 @@ def draw_tile(frame, image, name, x, y, tw, th, state, found, label_scale):
         r = max(7, tw // 10)
         draw_check(frame, x + tw - r - 4, y + r + 4, r)
 
+    if not ready and tw >= 70:
+        tag = "press r to set up"
+        scale = 0.35 if tw < 120 else 0.45
+        tag = fit_text(tag, tw - 8, scale)
+        tag_w, tag_h = cv2.getTextSize(tag, FONT, scale, 1)[0]
+        darken(frame, x + 1, y + 1, x + tw - 1, y + tag_h + 9, 0.7)
+        cv2.putText(frame, tag, (x + (tw - tag_w) // 2, y + tag_h + 4), FONT, scale, AMBER, 1, cv2.LINE_AA)
+
+    if number is not None:
+        r = max(9, min(16, tw // 7))
+        cx, cy = x + r + 4, y + r + 4
+        cv2.circle(frame, (cx, cy), r, AMBER, -1, cv2.LINE_AA)
+        text = str(number)
+        scale = r / 18
+        tw_, th_ = cv2.getTextSize(text, FONT, scale, 2)[0]
+        cv2.putText(frame, text, (cx - tw_ // 2, cy + th_ // 2), FONT, scale, BLACK, 2, cv2.LINE_AA)
+
 
 def tile_state(name, matched, holding):
     if name == matched:
@@ -287,8 +316,10 @@ def tile_state(name, matched, holding):
     return None
 
 
-def draw_gallery_strip(frame, poses, matched, found, holding=None):
-    """Row of every meme along the bottom of the camera view."""
+def draw_gallery_strip(frame, poses, matched, found, holding=None, ready=None, numbered=False):
+    """Row of every meme along the bottom of the camera view.
+    ready: set of pose names the game can recognize (None = all).
+    numbered: show 1, 2, 3... on the tiles for choosing a pose to record."""
     h, w = frame.shape[:2]
     names = list(poses)
     if not names:
@@ -301,27 +332,24 @@ def draw_gallery_strip(frame, poses, matched, found, holding=None):
     top = h - strip_h
 
     darken(frame, 0, top, w, h)
-    cv2.putText(
-        frame,
-        f"Poses you can try: {len(found)}/{len(names)} found   (g = full gallery)",
-        (pad, top + 17),
-        FONT,
-        0.5,
-        WHITE,
-        1,
-        cv2.LINE_AA,
-    )
+    if numbered:
+        header = "Record which pose? Press its number (Esc to cancel)"
+    else:
+        header = f"Poses you can try: {len(found)}/{len(names)} found   (g = gallery, r = record)"
+    cv2.putText(frame, fit_text(header, w - pad * 2, 0.5), (pad, top + 17), FONT, 0.5, WHITE, 1, cv2.LINE_AA)
 
     total_w = len(names) * tile_w + (len(names) - 1) * pad
     x = (w - total_w) // 2
     y = top + 22 + pad
-    for name in names:
+    for i, name in enumerate(names):
         state = tile_state(name, matched, holding)
-        draw_tile(frame, poses[name], name, x, y, tile_w, tile_h, state, name in found, 0.4)
+        is_ready = numbered or ready is None or name in ready  # numbers replace the tag
+        number = i + 1 if numbered and i < 9 else None
+        draw_tile(frame, poses[name], name, x, y, tile_w, tile_h, state, name in found, 0.4, is_ready, number)
         x += tile_w + pad
 
 
-def draw_gallery_grid(frame, poses, matched, found, holding=None):
+def draw_gallery_grid(frame, poses, matched, found, holding=None, ready=None):
     """Full-screen grid of every meme, opened with 'g'."""
     h, w = frame.shape[:2]
     darken(frame, 0, 0, w, h, 0.8)
@@ -347,7 +375,8 @@ def draw_gallery_grid(frame, poses, matched, found, holding=None):
         x = x0 + c * (tile_w + pad)
         y = top + pad + r * (tile_h + pad)
         state = tile_state(name, matched, holding)
-        draw_tile(frame, poses[name], name, x, y, tile_w, tile_h, state, name in found, 0.6)
+        is_ready = ready is None or name in ready
+        draw_tile(frame, poses[name], name, x, y, tile_w, tile_h, state, name in found, 0.6, is_ready)
 
 
 def draw_status(frame, matched, holding=None, progress=0.0, show_text=True):
@@ -368,6 +397,51 @@ def draw_status(frame, matched, holding=None, progress=0.0, show_text=True):
         cv2.rectangle(frame, (20, 58), (20 + int(bar_w * progress), 68), AMBER, -1)
 
 
+def draw_center_text(frame, text, y, scale, color, thickness=2):
+    w = frame.shape[1]
+    text = fit_text(text, w - 40, scale, thickness)
+    tw = cv2.getTextSize(text, FONT, scale, thickness)[0][0]
+    cv2.putText(frame, text, ((w - tw) // 2, y), FONT, scale, BLACK, thickness + 3, cv2.LINE_AA)
+    cv2.putText(frame, text, ((w - tw) // 2, y), FONT, scale, color, thickness, cv2.LINE_AA)
+
+
+def draw_record_overlay(frame, image, name, phase, elapsed, count):
+    """Countdown and recording screens.
+    phase: "countdown" or "recording"; elapsed: seconds since the phase began."""
+    h, w = frame.shape[:2]
+
+    # The meme to copy, in the top-right corner
+    ref_w = min(260, w // 3)
+    ref_h = int(ref_w * 0.6)
+    x, y = w - ref_w - 16, 16
+    frame[y : y + ref_h, x : x + ref_w] = fit(image, ref_w, ref_h)
+    cv2.rectangle(frame, (x, y), (x + ref_w - 1, y + ref_h - 1), WHITE, 1)
+
+    if phase == "countdown":
+        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), AMBER, 8)
+        cv2.putText(frame, fit_text(f"GET INTO: {display_name(name).upper()}", x - 30, 0.8, 2), (20, 45), FONT, 0.8, AMBER, 2, cv2.LINE_AA)
+        left = max(1, math.ceil(COUNTDOWN_SECONDS - elapsed))
+        draw_center_text(frame, str(left), h // 2 + 40, 4, WHITE, 6)
+        draw_center_text(frame, "Make sure your face and both arms are in view", h // 2 + 90, 0.6, WHITE, 1)
+    else:
+        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), RED, 8)
+        cv2.circle(frame, (32, 38), 10, RED, -1, cv2.LINE_AA)
+        title = "RECORDING - hold the pose" if x - 52 > 380 else "RECORDING"
+        cv2.putText(frame, title, (52, 47), FONT, 0.8, RED, 2, cv2.LINE_AA)
+        bar_w = min(300, w - 40)
+        progress = min(1.0, elapsed / RECORD_SECONDS)
+        cv2.rectangle(frame, (20, 60), (20 + bar_w, 70), GREY, 1)
+        cv2.rectangle(frame, (20, 60), (20 + int(bar_w * progress), 70), RED, -1)
+        cv2.putText(frame, f"{count} examples", (20, 92), FONT, 0.6, WHITE, 1, cv2.LINE_AA)
+    cv2.putText(frame, "Esc to cancel", (20, h - 20), FONT, 0.5, WHITE, 1, cv2.LINE_AA)
+
+
+def draw_message(frame, text, color):
+    h, w = frame.shape[:2]
+    darken(frame, 0, 80, w, 130, 0.7)
+    draw_center_text(frame, text, 113, 0.7, color, 2)
+
+
 # -----------------------------
 # Main loop
 # -----------------------------
@@ -380,6 +454,11 @@ def main():
     for name in DETECTORS:
         if name not in poses:
             print(f"Warning: detector '{name}' has no image in poses/")
+
+    samples = {name: s for name, s in pose_samples.load_samples(SAMPLES_DIR).items() if name in poses}
+
+    def ready_poses():
+        return {name for name in poses if name in DETECTORS or name in samples}
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
@@ -397,11 +476,23 @@ def main():
         min_tracking_confidence=0.5,
     )
 
+    names = list(poses)
     tracker = PoseTracker()
     found = set()
     show_grid = False
     popup_visible = False
     popup_pose = None
+
+    # mode: "play", "choose" (picking a pose to record), "countdown" or "recording"
+    mode = "play"
+    record_pose = None
+    phase_start = 0.0
+    recorded = []
+    message, message_color, message_until = None, WHITE, 0.0
+
+    def start_countdown(name, now):
+        nonlocal mode, record_pose, phase_start, show_grid
+        mode, record_pose, phase_start, show_grid = "countdown", name, now, False
 
     while True:
         success, frame = cap.read()
@@ -413,21 +504,56 @@ def main():
         now = time.monotonic()
 
         results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        scores = score_poses(results.pose_landmarks.landmark, w, h) if results.pose_landmarks else {}
-        matched = tracker.update(scores, now)
-        if matched not in poses:
-            matched = None
-        holding = tracker.candidate if tracker.candidate in poses else None
-        progress = tracker.hold_progress(now)
-        if matched:
-            found.add(matched)
+        landmarks = results.pose_landmarks.landmark if results.pose_landmarks else None
 
-        if show_grid:
-            draw_gallery_grid(frame, poses, matched, found, holding)
+        matched, holding, progress = None, None, 0.0
+        if mode == "play":
+            scores = score_poses(landmarks, w, h, samples) if landmarks else {}
+            matched = tracker.update(scores, now)
+            if matched not in poses:
+                matched = None
+            holding = tracker.candidate if tracker.candidate in poses else None
+            progress = tracker.hold_progress(now)
+            if matched:
+                found.add(matched)
+
+        if mode == "countdown" and now - phase_start >= COUNTDOWN_SECONDS:
+            mode, phase_start, recorded = "recording", now, []
+
+        if mode == "recording":
+            if landmarks:
+                vec = pose_samples.normalize(landmarks, w, h, MIN_VISIBILITY)
+                if vec is not None:
+                    recorded.append(vec)
+            if now - phase_start >= RECORD_SECONDS:
+                if len(recorded) >= MIN_SAMPLES:
+                    samples[record_pose] = pose_samples.save_samples(SAMPLES_DIR, record_pose, recorded)
+                    message = f"Saved {len(recorded)} examples for {display_name(record_pose)}. Try it!"
+                    message_color = GREEN
+                else:
+                    message = "Couldn't see your face and both arms clearly. Step back and try again."
+                    message_color = RED
+                message_until = now + 3
+                mode = "play"
+                tracker = PoseTracker()
+
+        if mode in ("countdown", "recording"):
+            if results.pose_landmarks:
+                mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+            draw_record_overlay(frame, poses[record_pose], record_pose, mode, now - phase_start, len(recorded) if mode == "recording" else 0)
+        elif show_grid:
+            draw_gallery_grid(frame, poses, matched, found, holding, ready_poses())
             draw_status(frame, matched, holding, progress, show_text=False)
         else:
-            draw_status(frame, matched, holding, progress)
-            draw_gallery_strip(frame, poses, matched, found, holding)
+            if mode == "choose":
+                cv2.rectangle(frame, (0, 0), (w - 1, h - 1), AMBER, 8)
+                cv2.putText(frame, "RECORD A POSE", (20, 45), FONT, 1, AMBER, 2, cv2.LINE_AA)
+            else:
+                draw_status(frame, matched, holding, progress)
+            draw_gallery_strip(frame, poses, matched, found, holding, ready_poses(), numbered=mode == "choose")
+
+        if message and now < message_until:
+            draw_message(frame, message, message_color)
 
         # Meme popup for the matched pose
         if matched:
@@ -450,8 +576,22 @@ def main():
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             break
-        if key == ord("g"):
-            show_grid = not show_grid
+        if mode == "play":
+            if key == ord("g"):
+                show_grid = not show_grid
+            elif key == ord("r"):
+                if len(names) == 1:
+                    start_countdown(names[0], now)
+                else:
+                    mode, show_grid = "choose", False
+        elif mode == "choose":
+            if key in (27, ord("r")):
+                mode = "play"
+            elif ord("1") <= key <= ord("9") and key - ord("1") < len(names):
+                start_countdown(names[key - ord("1")], now)
+        elif key == 27:  # cancel countdown or recording
+            mode = "play"
+            tracker = PoseTracker()
 
     cap.release()
     pose.close()

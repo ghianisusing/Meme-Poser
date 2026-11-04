@@ -30,16 +30,22 @@ python face_detector.py    # face detection demo
 | Key | Action |
 | --- | --- |
 | `g` | Open or close the full gallery of all poses |
+| `r` | Record a pose (then press the pose's number) |
+| `Esc` | Cancel recording |
 | `q` | Quit |
 
 ## Adding a meme
 
-1. Put the image in `poses/`, e.g. `poses/dab.png`. The file name becomes the pose name, and it shows up in the gallery automatically.
-2. Write a scoring function in `pose_detection.py` and add it to `DETECTORS` under the same name (`"dab": score_dab`). It gets a `Body` and returns a score from 0 (not this pose) to 1 (clearly this pose). Measure distances with `body.dist()` and `body.above()`, which use shoulder widths, so the pose works at any distance from the camera. See `score_hands_behind_head` for an example. Until you add a function, the meme shows in the gallery but can't be matched.
+1. Put the image in `poses/`, e.g. `poses/dab.png`. The file name becomes the pose name, and it shows up in the gallery automatically, tagged "press r to set up".
+2. Run the game, press `r`, then the meme's number. You get 3 seconds to get into the pose, then the game records you for 3 seconds. Keep your face and both arms in view.
+
+The examples are saved to `poses/samples/dab.npy`. From then on the game recognizes the pose by comparing you to those examples. Recording again adds more examples, which helps if the pose is hard to trigger. Delete the `.npy` file to start over.
+
+You can also write a scoring rule by hand for more control: add a function to `DETECTORS` in `pose_detection.py` under the same name (`"dab": score_dab`). It gets a `Body` and returns a score from 0 (not this pose) to 1 (clearly this pose). See `score_hands_behind_head` for an example. If a pose has both a rule and recorded examples, the higher score counts.
 
 ## Tuning
 
-The settings at the top of `pose_detection.py` control matching: `HOLD_SECONDS` (how long to hold), `ENTER_SCORE` / `EXIT_SCORE` (how strict), `MIN_VISIBILITY` and `SMOOTHING`.
+The settings at the top of `pose_detection.py` control matching: `HOLD_SECONDS` (how long to hold), `ENTER_SCORE` / `EXIT_SCORE` (how strict), `MIN_VISIBILITY` and `SMOOTHING`, plus the record timings. For recorded poses, `NEAR` and `FAR` in `pose_samples.py` set how closely you need to copy the recording.
 
 ## Tests
 
