@@ -1,6 +1,7 @@
 import math
 import os
 import sys
+import time
 
 import cv2
 import mediapipe as mp
@@ -13,8 +14,16 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 POSES_DIR = os.path.join(SCRIPT_DIR, "poses")
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 
+# Matching settings
+MIN_VISIBILITY = 0.5  # ignore body points MediaPipe isn't sure it can see
+ENTER_SCORE = 0.7  # score needed to start holding a pose
+EXIT_SCORE = 0.4  # a matched pose stays matched until its score drops below this
+HOLD_SECONDS = 0.5  # how long to hold a pose before the meme shows
+SMOOTHING = 0.5  # 0 = no smoothing, closer to 1 = smoother but slower
+
 # Colors (BGR)
 GREEN = (80, 200, 80)
+AMBER = (40, 170, 240)
 RED = (60, 60, 230)
 GREY = (150, 150, 150)
 WHITE = (255, 255, 255)
@@ -24,36 +33,146 @@ FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 
 # -----------------------------
-# Pose detectors
+# Body geometry
 # -----------------------------
-def distance(p1, p2):
-    return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+class Body:
+    """Landmarks in pixels, measured in shoulder widths so that
+    distance from the camera doesn't change the result."""
+
+    def __init__(self, landmarks, w, h):
+        self.lm = landmarks
+        self.w, self.h = w, h
+        ls, rs = self.px(PL.LEFT_SHOULDER), self.px(PL.RIGHT_SHOULDER)
+        self.shoulder_width = max(math.dist(ls, rs), 1e-6)
+
+    def px(self, idx):
+        p = self.lm[idx]
+        return (p.x * self.w, p.y * self.h)
+
+    def visible(self, *idxs):
+        return all(self.lm[i].visibility >= MIN_VISIBILITY for i in idxs)
+
+    def dist(self, a, b):
+        """Distance between two points, in shoulder widths."""
+        return math.dist(a, b) / self.shoulder_width
+
+    def above(self, a, b):
+        """How far point a is above point b, in shoulder widths (negative = below)."""
+        return (b[1] - a[1]) / self.shoulder_width
+
+    def head(self):
+        """Center of the head from whichever of nose and ears are visible."""
+        pts = [self.px(i) for i in (PL.NOSE, PL.LEFT_EAR, PL.RIGHT_EAR) if self.visible(i)]
+        if not pts:
+            return None
+        return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
 
 
-def detect_hands_behind_head(landmarks, w, h):
-    def px(lm):
-        return (int(lm.x * w), int(lm.y * h))
+def angle(a, b, c):
+    """Angle at point b, in degrees."""
+    ab = (a[0] - b[0], a[1] - b[1])
+    cb = (c[0] - b[0], c[1] - b[1])
+    n = math.hypot(*ab) * math.hypot(*cb)
+    if n == 0:
+        return 180.0
+    cos = (ab[0] * cb[0] + ab[1] * cb[1]) / n
+    return math.degrees(math.acos(max(-1.0, min(1.0, cos))))
 
-    lw = px(landmarks[PL.LEFT_WRIST])
-    rw = px(landmarks[PL.RIGHT_WRIST])
-    le = px(landmarks[PL.LEFT_EAR])
-    re = px(landmarks[PL.RIGHT_EAR])
 
-    return distance(lw, le) < 120 and distance(rw, re) < 120
+def ramp(value, bad, good):
+    """0 at `bad`, 1 at `good`, linear in between (works in either direction)."""
+    if bad == good:
+        return 1.0 if value == good else 0.0
+    t = (value - bad) / (good - bad)
+    return max(0.0, min(1.0, t))
 
 
-# Pose name (image file name without extension) -> detector function.
+# -----------------------------
+# Pose detectors
+# Each returns a score from 0 (not this pose) to 1 (clearly this pose).
+# -----------------------------
+def score_hands_behind_head(body):
+    arms = (PL.LEFT_SHOULDER, PL.RIGHT_SHOULDER, PL.LEFT_ELBOW, PL.RIGHT_ELBOW, PL.LEFT_WRIST, PL.RIGHT_WRIST)
+    if not body.visible(*arms):
+        return 0.0
+    head = body.head()
+    if head is None:
+        return 0.0
+
+    scores = []
+    for s, e, wr in (
+        (PL.LEFT_SHOULDER, PL.LEFT_ELBOW, PL.LEFT_WRIST),
+        (PL.RIGHT_SHOULDER, PL.RIGHT_ELBOW, PL.RIGHT_WRIST),
+    ):
+        shoulder, elbow, wrist = body.px(s), body.px(e), body.px(wr)
+        scores += [
+            ramp(body.dist(wrist, head), 1.3, 0.7),  # hand close to the head
+            ramp(body.above(wrist, shoulder), 0.0, 0.4),  # hand above the shoulder
+            ramp(body.above(elbow, shoulder), -0.4, 0.0),  # elbow up at shoulder height
+            ramp(angle(shoulder, elbow, wrist), 130, 95),  # elbow bent
+        ]
+
+    le, re = body.px(PL.LEFT_ELBOW), body.px(PL.RIGHT_ELBOW)
+    scores.append(ramp(abs(le[0] - re[0]) / body.shoulder_width, 1.2, 1.8))  # elbows out wide
+
+    return min(scores)
+
+
+# Pose name (image file name without extension) -> scoring function.
 # Images in poses/ without a detector still show in the gallery.
 DETECTORS = {
-    "hands_behind_head": detect_hands_behind_head,
+    "hands_behind_head": score_hands_behind_head,
 }
 
 
-def detect_pose(landmarks, w, h):
-    for name, detector in DETECTORS.items():
-        if detector(landmarks, w, h):
-            return name
-    return None
+def score_poses(landmarks, w, h):
+    body = Body(landmarks, w, h)
+    return {name: detector(body) for name, detector in DETECTORS.items()}
+
+
+class PoseTracker:
+    """Turns per-frame scores into a steady result.
+
+    - Scores are smoothed so one noisy frame doesn't flip the result.
+    - A pose has to stay above ENTER_SCORE for HOLD_SECONDS before it matches.
+    - Once matched, it stays matched until its score drops below EXIT_SCORE.
+    """
+
+    def __init__(self):
+        self.smoothed = {}
+        self.matched = None
+        self.candidate = None
+        self.hold_start = None
+
+    def update(self, scores, now):
+        for name in set(self.smoothed) | set(scores):
+            new = scores.get(name, 0.0)
+            old = self.smoothed.get(name, new)
+            self.smoothed[name] = SMOOTHING * old + (1 - SMOOTHING) * new
+
+        if self.matched:
+            if self.smoothed.get(self.matched, 0.0) >= EXIT_SCORE:
+                return self.matched
+            self.matched = None
+
+        best = max(self.smoothed, key=self.smoothed.get, default=None)
+        if best is None or self.smoothed[best] < ENTER_SCORE:
+            self.candidate, self.hold_start = None, None
+            return None
+
+        if best != self.candidate:
+            self.candidate, self.hold_start = best, now
+
+        if now - self.hold_start >= HOLD_SECONDS:
+            self.matched = best
+            self.candidate, self.hold_start = None, None
+        return self.matched
+
+    def hold_progress(self, now):
+        """0..1 progress toward matching the current candidate pose."""
+        if not self.candidate or self.hold_start is None:
+            return 0.0
+        return min(1.0, (now - self.hold_start) / HOLD_SECONDS)
 
 
 # -----------------------------
@@ -128,8 +247,9 @@ def draw_check(frame, cx, cy, r):
     cv2.polylines(frame, [pts], False, WHITE, max(2, r // 4), cv2.LINE_AA)
 
 
-def draw_tile(frame, image, name, x, y, tw, th, active, found, label_scale):
-    """Draw one meme thumbnail with its name underneath."""
+def draw_tile(frame, image, name, x, y, tw, th, state, found, label_scale):
+    """Draw one meme thumbnail with its name underneath.
+    state: "matched", "holding" or None."""
     text_h = cv2.getTextSize("Ag", FONT, label_scale, 1)[0][1]
     show_label = tw >= 70 and th * 0.22 >= text_h + 4
     label_h = int(th * 0.22) if show_label else 0
@@ -137,8 +257,10 @@ def draw_tile(frame, image, name, x, y, tw, th, active, found, label_scale):
 
     frame[y : y + img_h, x : x + tw] = fit(image, tw, img_h)
 
-    if active:
+    if state == "matched":
         color, thickness = GREEN, 3
+    elif state == "holding":
+        color, thickness = AMBER, 3
     elif found:
         color, thickness = GREEN, 1
     else:
@@ -150,14 +272,22 @@ def draw_tile(frame, image, name, x, y, tw, th, active, found, label_scale):
         text_w = cv2.getTextSize(text, FONT, label_scale, 1)[0][0]
         tx = x + (tw - text_w) // 2
         ty = y + img_h + (label_h + text_h) // 2
-        cv2.putText(frame, text, (tx, ty), FONT, label_scale, WHITE if active else GREY, 1, cv2.LINE_AA)
+        cv2.putText(frame, text, (tx, ty), FONT, label_scale, WHITE if state else GREY, 1, cv2.LINE_AA)
 
     if found:
         r = max(7, tw // 10)
         draw_check(frame, x + tw - r - 4, y + r + 4, r)
 
 
-def draw_gallery_strip(frame, poses, active, found):
+def tile_state(name, matched, holding):
+    if name == matched:
+        return "matched"
+    if name == holding:
+        return "holding"
+    return None
+
+
+def draw_gallery_strip(frame, poses, matched, found, holding=None):
     """Row of every meme along the bottom of the camera view."""
     h, w = frame.shape[:2]
     names = list(poses)
@@ -186,11 +316,12 @@ def draw_gallery_strip(frame, poses, active, found):
     x = (w - total_w) // 2
     y = top + 22 + pad
     for name in names:
-        draw_tile(frame, poses[name], name, x, y, tile_w, tile_h, name == active, name in found, 0.4)
+        state = tile_state(name, matched, holding)
+        draw_tile(frame, poses[name], name, x, y, tile_w, tile_h, state, name in found, 0.4)
         x += tile_w + pad
 
 
-def draw_gallery_grid(frame, poses, active, found):
+def draw_gallery_grid(frame, poses, matched, found, holding=None):
     """Full-screen grid of every meme, opened with 'g'."""
     h, w = frame.shape[:2]
     darken(frame, 0, 0, w, h, 0.8)
@@ -215,18 +346,26 @@ def draw_gallery_grid(frame, poses, active, found):
         r, c = divmod(i, cols)
         x = x0 + c * (tile_w + pad)
         y = top + pad + r * (tile_h + pad)
-        draw_tile(frame, poses[name], name, x, y, tile_w, tile_h, name == active, name in found, 0.6)
+        state = tile_state(name, matched, holding)
+        draw_tile(frame, poses[name], name, x, y, tile_w, tile_h, state, name in found, 0.6)
 
 
-def draw_status(frame, matched, show_text=True):
+def draw_status(frame, matched, holding=None, progress=0.0, show_text=True):
     h, w = frame.shape[:2]
     if matched:
         color, text = GREEN, f"MATCH: {display_name(matched).upper()}"
+    elif holding:
+        color, text = AMBER, f"HOLD IT... {display_name(holding).upper()}"
     else:
         color, text = RED, "STRIKE A POSE"
     cv2.rectangle(frame, (0, 0), (w - 1, h - 1), color, 8)
-    if show_text:
-        cv2.putText(frame, text, (20, 45), FONT, 1, color, 2, cv2.LINE_AA)
+    if not show_text:
+        return
+    cv2.putText(frame, text, (20, 45), FONT, 1, color, 2, cv2.LINE_AA)
+    if holding and not matched:
+        bar_w = min(300, w - 40)
+        cv2.rectangle(frame, (20, 58), (20 + bar_w, 68), GREY, 1)
+        cv2.rectangle(frame, (20, 58), (20 + int(bar_w * progress), 68), AMBER, -1)
 
 
 # -----------------------------
@@ -238,9 +377,9 @@ def main():
         print(f"No pose images found in {POSES_DIR}")
         sys.exit(1)
 
-    missing = [name for name in DETECTORS if name not in poses]
-    for name in missing:
-        print(f"Warning: detector '{name}' has no image in poses/")
+    for name in DETECTORS:
+        if name not in poses:
+            print(f"Warning: detector '{name}' has no image in poses/")
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
@@ -258,6 +397,7 @@ def main():
         min_tracking_confidence=0.5,
     )
 
+    tracker = PoseTracker()
     found = set()
     show_grid = False
     popup_visible = False
@@ -270,22 +410,24 @@ def main():
 
         frame = cv2.flip(frame, 1)
         h, w = frame.shape[:2]
+        now = time.monotonic()
 
         results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        matched = None
-        if results.pose_landmarks:
-            matched = detect_pose(results.pose_landmarks.landmark, w, h)
-        if matched and matched in poses:
-            found.add(matched)
-        else:
+        scores = score_poses(results.pose_landmarks.landmark, w, h) if results.pose_landmarks else {}
+        matched = tracker.update(scores, now)
+        if matched not in poses:
             matched = None
+        holding = tracker.candidate if tracker.candidate in poses else None
+        progress = tracker.hold_progress(now)
+        if matched:
+            found.add(matched)
 
         if show_grid:
-            draw_gallery_grid(frame, poses, matched, found)
-            draw_status(frame, matched, show_text=False)
+            draw_gallery_grid(frame, poses, matched, found, holding)
+            draw_status(frame, matched, holding, progress, show_text=False)
         else:
-            draw_status(frame, matched)
-            draw_gallery_strip(frame, poses, matched, found)
+            draw_status(frame, matched, holding, progress)
+            draw_gallery_strip(frame, poses, matched, found, holding)
 
         # Meme popup for the matched pose
         if matched:
