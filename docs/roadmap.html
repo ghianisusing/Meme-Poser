@@ -1,0 +1,313 @@
+<title>Meme Poser Roadmap</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; findings list → pipeline before/after → four-phase map → reveal mock → start-here table → code sketch */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --fg: #161a21;
+  --muted: #5b6372;
+  --line: #dde1e8;
+  --detect: #2457c9;
+  --detect-soft: #e6edfb;
+  --ui: #a93578;
+  --ui-soft: #f8e7f0;
+  --base: #4a5262;
+  --base-soft: #eceef2;
+  --ok: #1d7f47;
+  --warn: #a8670a;
+  --bad: #c0352b;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --surface: #1a1e26; --fg: #e8ebf1; --muted: #9aa3b3; --line: #2c323d;
+    --detect: #7ea3ff; --detect-soft: #1d2a47; --ui: #f08cc3; --ui-soft: #3a1f30;
+    --base: #b3bac8; --base-soft: #262b35; --ok: #5fd08f; --warn: #f0b04f; --bad: #ff7d72;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --surface: #1a1e26; --fg: #e8ebf1; --muted: #9aa3b3; --line: #2c323d;
+  --detect: #7ea3ff; --detect-soft: #1d2a47; --ui: #f08cc3; --ui-soft: #3a1f30;
+  --base: #b3bac8; --base-soft: #262b35; --ok: #5fd08f; --warn: #f0b04f; --bad: #ff7d72;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.08; }
+h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+.eyebrow { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+section { display: grid; gap: 20px; }
+.lede { color: var(--muted); font-size: 17px; }
+
+header { display: grid; gap: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.tag { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; font-weight: 500;
+  padding: 3px 9px; border-radius: 999px; letter-spacing: 0.02em; white-space: nowrap; }
+.tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.t-detect { color: var(--detect); background: var(--detect-soft); }
+.t-ui { color: var(--ui); background: var(--ui-soft); }
+.t-base { color: var(--base); background: var(--base-soft); }
+
+.findings { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.findings li { display: grid; grid-template-columns: 86px 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.findings li > div { min-width: 0; display: grid; gap: 4px; }
+.sev { font-family: var(--mono); font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; padding-top: 2px; }
+.sev.high { color: var(--bad); } .sev.med { color: var(--warn); } .sev.low { color: var(--muted); }
+.findings strong { font-weight: 600; }
+.where { color: var(--muted); font-family: var(--mono); font-size: 12.5px; }
+
+.pipes { display: grid; gap: 18px; }
+.pipe { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 12px; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.node { font-family: var(--mono); font-size: 12.5px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); }
+.node.new-d { border-color: var(--detect); color: var(--detect); background: var(--detect-soft); }
+.node.new-u { border-color: var(--ui); color: var(--ui); background: var(--ui-soft); }
+.arrow { color: var(--muted); font-family: var(--mono); }
+.pipe .note { color: var(--muted); font-size: 13.5px; }
+
+.phases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.phase { display: grid; gap: 10px; align-content: start; }
+.phase-head { display: grid; gap: 2px; padding-bottom: 10px; border-bottom: 2px solid var(--fg); }
+.phase-head .eyebrow { color: var(--fg); }
+.phase-head p { color: var(--muted); font-size: 13px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 13px; display: grid; gap: 7px; }
+.card h3 { font-family: var(--body); font-size: 14px; font-weight: 600; line-height: 1.35; }
+.card p { font-size: 13px; color: var(--muted); }
+.card .tag { justify-self: start; }
+@media (max-width: 900px) { .phases { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .phases { grid-template-columns: 1fr; }
+  .findings li { grid-template-columns: 1fr; gap: 4px; }
+}
+
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 14px; }
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.n { font-family: var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; width: 36px; }
+.dots { font-family: var(--mono); letter-spacing: 2px; color: var(--fg); white-space: nowrap; }
+.dots .off { color: var(--line); }
+
+pre { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px;
+  overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.6; }
+.c { color: var(--muted); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+.two > div { min-width: 0; display: grid; gap: 8px; align-content: start; }
+.two p { font-size: 14px; color: var(--muted); }
+
+.mocks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .mocks { grid-template-columns: 1fr; } }
+.mock { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; align-content: start; }
+.mock h3 { font-family: var(--body); font-size: 14px; font-weight: 600; }
+.mock p { font-size: 13px; color: var(--muted); }
+.pane { position: relative; border-radius: 6px; border: 2px solid var(--line); background: var(--bg); padding: 10px; font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  display: grid; align-content: space-between; gap: 8px; aspect-ratio: 4 / 3; max-width: 100%; }
+.pane.near { border-color: var(--warn); }
+.pane.hit { border-color: var(--ok); }
+.reveal { position: absolute; right: 8px; bottom: 8px; width: 42%; aspect-ratio: 1; border-radius: 4px; border: 2px solid var(--ok); background: var(--surface);
+  display: grid; place-items: center; text-align: center; color: var(--fg); font-size: 10.5px; padding: 4px; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; width: 55%; }
+.bar span { display: block; height: 100%; background: var(--warn); }
+.strip { display: flex; gap: 4px; }
+.thumb { flex: 1; min-width: 0; aspect-ratio: 1; border-radius: 3px; border: 1px solid var(--line); background: var(--surface);
+  display: grid; place-items: center; font-size: 9px; color: var(--muted); overflow: hidden; }
+.thumb.on { border: 2px solid var(--warn); color: var(--fg); }
+.thumb.got { border: 2px solid var(--ok); color: var(--ok); }
+footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Meme Poser · improvement map · Nov 2026</span>
+  <h1>Strike a pose, get the meme</h1>
+  <p class="lede">The game watches your body, works out which pose you're doing, and shows the meme that goes with it. A gallery of every meme stays on screen so players know which poses to try. This map covers two tracks: recognizing many poses reliably, and making the gallery and reveal feel good. Based on <code>pose_detection.py</code> and <code>face_detector.py</code> on branch <code>chore/python-venv</code>.</p>
+  <div class="legend">
+    <span class="tag t-detect">Recognition</span>
+    <span class="tag t-ui">UI</span>
+    <span class="tag t-base">Foundation</span>
+  </div>
+</header>
+
+<section>
+  <span class="eyebrow">Where it stands</span>
+  <h2>What the code does today</h2>
+  <p>MediaPipe finds 33 body points per frame. One rule then checks for one pose: both wrists within 120 pixels of the ears. If it passes, a separate window opens with the meme. The reveal idea works; the recognition behind it is what limits the game.</p>
+  <ul class="findings">
+    <li><span class="sev high">High</span><div><strong>It can only recognize one pose.</strong> The rule for "hands behind head" is written into the main loop, and <code>current_pose</code> is fixed. There's no way to ask "which of my memes is this?"<span class="where">pose_detection.py:36, 103–108</span></div></li>
+    <li><span class="sev high">High</span><div><strong>How far you stand changes the result.</strong> 120 pixels is a lot when you're close and very little when you're far. It also changes with webcam resolution.<span class="where">pose_detection.py:107</span></div></li>
+    <li><span class="sev high">High</span><div><strong>Wrong poses trigger the meme.</strong> Covering your ears, or resting your chin on your hands, also passes. Elbows, which define this pose, aren't checked. Ears are often hidden in this pose and visibility isn't checked. With more memes, this turns into the wrong meme appearing.<span class="where">pose_detection.py:89–108</span></div></li>
+    <li><span class="sev med">Medium</span><div><strong>The meme window blinks.</strong> At the edge of the threshold the popup opens and closes every few frames. There's no smoothing and no "hold for a moment" rule.<span class="where">pose_detection.py:129–145</span></div></li>
+    <li><span class="sev med">Medium</span><div><strong>The reveal is a separate window at a fixed spot.</strong> It's placed at x = 1450, which is off-screen on 1366 px laptops, and opening a new OS window each time feels clunky.<span class="where">pose_detection.py:133–135</span></div></li>
+    <li><span class="sev med">Medium</span><div><strong>A missing image crashes before the error message.</strong> <code>cv2.resize(cv2.imread(...))</code> fails on a missing file before the "Failed to load" check runs.<span class="where">pose_detection.py:24–34</span></div></li>
+    <li><span class="sev low">Low</span><div><strong>Text and README point the other way.</strong> The screen says "COPY THE POSE" and the README says "Copy the meme pose", which suggests the meme comes first.<span class="where">pose_detection.py:118, README.md</span></div></li>
+    <li><span class="sev low">Low</span><div><strong>Old MediaPipe API and a spare demo.</strong> <code>mp.solutions</code> pins MediaPipe 0.10.21 and Python 3.12. <code>face_detector.py</code> is a separate Haar-cascade demo the game doesn't use.<span class="where">requirements.txt, face_detector.py</span></div></li>
+  </ul>
+</section>
+
+<section>
+  <span class="eyebrow">Pipeline</span>
+  <h2>How a frame should flow</h2>
+  <div class="pipes">
+    <div class="pipe">
+      <h3>Today</h3>
+      <div class="flow">
+        <span class="node">Webcam</span><span class="arrow">→</span>
+        <span class="node">MediaPipe Pose</span><span class="arrow">→</span>
+        <span class="node">wrist↔ear px distance</span><span class="arrow">→</span>
+        <span class="node">&lt; 120 ?</span><span class="arrow">→</span>
+        <span class="node">open meme window</span>
+      </div>
+    </div>
+    <div class="pipe">
+      <h3>Target</h3>
+      <div class="flow">
+        <span class="node">Webcam</span><span class="arrow">→</span>
+        <span class="node">Pose model</span><span class="arrow">→</span>
+        <span class="node new-d">visibility gate</span><span class="arrow">→</span>
+        <span class="node new-d">normalize body size + position</span><span class="arrow">→</span>
+        <span class="node new-d">classify: which pose, or none</span><span class="arrow">→</span>
+        <span class="node new-d">hold ~0.5 s</span><span class="arrow">→</span>
+        <span class="node new-u">reveal that pose's meme</span>
+      </div>
+      <p class="note">The key change is the classifier: it compares your body to every pose in the library and picks the best one, or "none" if nothing is close enough. Adding a meme then means adding examples, not writing a new rule. The same pose library also feeds the on-screen gallery, so players always see which memes exist.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">The map</span>
+  <h2>Four phases</h2>
+  <p>Each phase leaves the game playable. Phase 1 makes the one current pose solid; Phase 2 is where the game grows to many memes.</p>
+  <div class="phases">
+    <div class="phase">
+      <div class="phase-head"><span class="eyebrow">Phase 0</span><h3>Clean ground</h3><p>About a day</p></div>
+      <div class="card"><span class="tag t-base">Foundation</span><h3>Split the script into modules</h3><p><code>camera.py</code>, <code>detector.py</code>, <code>classifier.py</code>, <code>poses/</code>, <code>ui.py</code>, <code>main.py</code>.</p></div>
+      <div class="card"><span class="tag t-base">Foundation</span><h3>Fix the image-load crash</h3><p>Check <code>imread</code> before resizing and name the missing file.</p></div>
+      <div class="card"><span class="tag t-base">Foundation</span><h3>Config file</h3><p>Camera index, thresholds and hold time in <code>config.toml</code>.</p></div>
+      <div class="card"><span class="tag t-base">Foundation</span><h3>Fix the wording</h3><p>Change "COPY THE POSE" to something like "Strike a pose" and update the README.</p></div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><span class="eyebrow">Phase 1</span><h3>One pose, done right</h3><p>2–3 days</p></div>
+      <div class="card"><span class="tag t-detect">Recognition</span><h3>Normalize body size</h3><p>Center on the hips and divide by shoulder width, so distance from the camera doesn't matter.</p></div>
+      <div class="card"><span class="tag t-detect">Recognition</span><h3>Check elbows and angles</h3><p>Elbow bend and elbows-above-shoulders rule out "hands on ears" and "chin on hands".</p></div>
+      <div class="card"><span class="tag t-detect">Recognition</span><h3>Visibility gate</h3><p>Ignore points with low <code>visibility</code>; use nose or eyes when ears are hidden.</p></div>
+      <div class="card"><span class="tag t-detect">Recognition</span><h3>Hold before reveal</h3><p>Smooth points over a few frames, require the pose for ~0.5 s, and keep the meme up until you clearly break the pose. No more blinking.</p></div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><span class="eyebrow">Phase 2</span><h3>Many memes</h3><p>About a week</p></div>
+      <div class="card"><span class="tag t-detect">Recognition</span><h3>Pose library folders</h3><p>Each meme is a folder: <code>meme.png</code> plus recorded examples of the pose. Drop in a folder to add a meme.</p></div>
+      <div class="card"><span class="tag t-detect">Recognition</span><h3>Record mode</h3><p>Press <code>r</code>, do the pose for a few seconds, and it saves 50–100 normalized samples into that meme's folder.</p></div>
+      <div class="card"><span class="tag t-detect">Recognition</span><h3>Nearest-match classifier</h3><p>Compare your normalized body to every saved sample (k-nearest neighbours). Best pose wins, or "none" if all are too far. No training step, works with a handful of memes.</p></div>
+      <div class="card"><span class="tag t-detect">Recognition</span><h3>Confusion test</h3><p>Replay recorded samples and print which poses get mixed up, so you know which memes need more examples.</p></div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><span class="eyebrow">Phase 3</span><h3>Gallery and reveal</h3><p>About a week</p></div>
+      <div class="card"><span class="tag t-ui">UI</span><h3>Pose gallery strip</h3><p>A row of small thumbnails of every meme in the library, always on screen, with each pose's name. Built from the pose folders, so a new meme shows up on its own.</p></div>
+      <div class="card"><span class="tag t-ui">UI</span><h3>Gallery reacts to you</h3><p>The thumbnail of the pose you're closest to lights up while you hold it, and gets a check mark once you've found it this session.</p></div>
+      <div class="card"><span class="tag t-ui">UI</span><h3>Full gallery screen</h3><p>Press <code>g</code> (or <code>Tab</code>) to see every meme large, as a grid. Useful when the library grows past what fits in the strip.</p></div>
+      <div class="card"><span class="tag t-ui">UI</span><h3>Meme inside the camera view</h3><p>Pop the meme into a corner of the same window, sized to the screen. Drop the floating OS window.</p></div>
+      <div class="card"><span class="tag t-ui">UI</span><h3>"Almost" feedback</h3><p>While you hold, show the pose name it thinks you're doing and a short fill bar, so the reveal feels earned.</p></div>
+      <div class="card"><span class="tag t-ui">UI</span><h3>Pop-in animation</h3><p>Scale and fade the meme in over ~200 ms, with the pose name as a caption. Optional sound.</p></div>
+      <div class="card"><span class="tag t-ui">UI</span><h3>Skeleton overlay and snapshot</h3><p>Optional skeleton drawn on you; press space to save "you + the meme" side by side.</p></div>
+      <div class="card"><span class="tag t-base">Foundation</span><h3>Later: MediaPipe Tasks</h3><p><code>PoseLandmarker</code> replaces <code>mp.solutions</code> and lifts the Python 3.12 pin.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">The reveal</span>
+  <h2>What the player should see</h2>
+  <div class="mocks">
+    <div class="mock">
+      <div class="pane"><span>Webcam · Strike a pose</span><div class="strip"><span class="thumb">meme 1</span><span class="thumb">meme 2</span><span class="thumb">meme 3</span><span class="thumb">meme 4</span></div></div>
+      <h3>Idle</h3><p>No pose found. The gallery strip shows every meme you can try.</p>
+    </div>
+    <div class="mock">
+      <div class="pane near"><span>Webcam · Hands behind head?</span><div style="display:grid;gap:6px"><div class="bar"><span style="width:60%"></span></div><div class="strip"><span class="thumb on">meme 1</span><span class="thumb">meme 2</span><span class="thumb">meme 3</span><span class="thumb">meme 4</span></div></div></div>
+      <h3>Holding</h3><p>The closest pose lights up in the strip while the hold bar fills.</p>
+    </div>
+    <div class="mock">
+      <div class="pane hit"><span>Webcam</span><div class="reveal">meme 1<br>Hands behind head</div><div class="strip" style="width:52%"><span class="thumb got">✓</span><span class="thumb">2</span><span class="thumb">3</span><span class="thumb">4</span></div></div>
+      <h3>Revealed</h3><p>The meme pops in large, and its thumbnail gets a check mark.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Start here</span>
+  <h2>First six changes</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th></th><th>Change</th><th>Track</th><th>Effort</th><th>Player impact</th></tr></thead>
+      <tbody>
+        <tr><td class="n">1</td><td>Normalize by shoulder width instead of 120 px</td><td><span class="tag t-detect">Recognition</span></td><td class="dots">●<span class="off">●●</span></td><td class="dots">●●●</td></tr>
+        <tr><td class="n">2</td><td>Add elbow checks and a visibility gate</td><td><span class="tag t-detect">Recognition</span></td><td class="dots">●●<span class="off">●</span></td><td class="dots">●●●</td></tr>
+        <tr><td class="n">3</td><td>Hold 0.5 s before the reveal, and keep the meme up until you break the pose</td><td><span class="tag t-detect">Recognition</span></td><td class="dots">●<span class="off">●●</span></td><td class="dots">●●●</td></tr>
+        <tr><td class="n">4</td><td>Show the meme inside the camera window</td><td><span class="tag t-ui">UI</span></td><td class="dots">●<span class="off">●●</span></td><td class="dots">●●<span class="off">●</span></td></tr>
+        <tr><td class="n">5</td><td>Gallery strip of every meme pose, read from the <code>poses/</code> folder <span class="tag t-base" style="color:var(--ok)">Built</span></td><td><span class="tag t-ui">UI</span></td><td class="dots">●<span class="off">●●</span></td><td class="dots">●●●</td></tr>
+        <tr><td class="n">6</td><td>Pose folders + record mode + nearest-match classifier</td><td><span class="tag t-detect">Recognition</span></td><td class="dots">●●●</td><td class="dots">●●●</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>1–3 make the current pose reliable. 5 tells players what they can try, and works even with one meme. 6 lets the game recognize many memes, and it reuses the normalization from 1.</p>
+</section>
+
+<section>
+  <span class="eyebrow">Sketch</span>
+  <h2>The core of the classifier</h2>
+  <div class="two">
+    <div>
+      <p>Turn a frame into numbers that don't depend on where you stand: move the hips to the origin and scale by shoulder width.</p>
+<pre><span class="c"># classifier.py</span>
+def normalize(lm):
+    hip = midpoint(lm[L_HIP], lm[R_HIP])
+    sw = dist(lm[L_SHOULDER], lm[R_SHOULDER])
+    return np.array([
+        ((p.x - hip.x) / sw, (p.y - hip.y) / sw)
+        for p in lm[UPPER_BODY]
+    ]).ravel()</pre>
+    </div>
+    <div>
+      <p>Pick the closest recorded pose. Too far from everything means no meme.</p>
+<pre>def classify(vec, samples, max_dist=0.8, k=5):
+    <span class="c"># samples: list of (pose_name, vector)</span>
+    d = sorted(
+        (np.linalg.norm(vec - s), name)
+        for name, s in samples
+    )[:k]
+    if d[0][0] > max_dist:
+        return None
+    return Counter(n for _, n in d).most_common(1)[0][0]
+
+<span class="c"># poses/hands_behind_head/</span>
+<span class="c">#   meme.png</span>
+<span class="c">#   samples.npy   ← saved by record mode</span></pre>
+    </div>
+  </div>
+</section>
+
+<footer>Effort estimates assume one developer working part-time. Line numbers refer to commit c40e3dd.</footer>
+</div>
