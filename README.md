@@ -43,11 +43,22 @@ python face_detector.py    # face detection demo
 
 The examples are saved to `poses/samples/dab.npy`. From then on the game recognizes the pose by comparing you to those examples. Recording again adds more examples, which helps if the pose is hard to trigger. Delete the `.npy` file to start over.
 
-You can also write a scoring rule by hand for more control: add a function to `DETECTORS` in `pose_detection.py` under the same name (`"dab": score_dab`). It gets a `Body` and returns a score from 0 (not this pose) to 1 (clearly this pose). See `score_hands_behind_head` for an example. If a pose has both a rule and recorded examples, the higher score counts.
+You can also write a scoring rule by hand for more control: add a function to `DETECTORS` in `detection.py` under the same name (`"dab": score_dab`). It gets a `Body` and returns a score from 0 (not this pose) to 1 (clearly this pose). See `score_hands_behind_head` for an example. If a pose has both a rule and recorded examples, the higher score counts.
 
 ## Tuning
 
-The settings at the top of `pose_detection.py` control matching: `HOLD_SECONDS` (how long to hold), `ENTER_SCORE` / `EXIT_SCORE` (how strict), `MIN_VISIBILITY` and `SMOOTHING`, plus the record timings. For recorded poses, `NEAR` and `FAR` in `pose_samples.py` set how closely you need to copy the recording.
+All settings are in `settings.py`: `HOLD_SECONDS` (how long to hold), `ENTER_SCORE` / `EXIT_SCORE` (how strict), `MIN_VISIBILITY`, `SMOOTHING`, the record and reveal timings, and `SAMPLE_NEAR` / `SAMPLE_FAR` (how closely you need to copy a recorded pose).
+
+## Project layout
+
+| File | What it does |
+| --- | --- |
+| `pose_detection.py` | Runs the game: camera, keys, and switching between play and record mode |
+| `settings.py` | Every setting you can tune |
+| `detection.py` | Hand-written pose rules and the hold timer |
+| `pose_samples.py` | Recorded pose examples and matching against them |
+| `library.py` | Loads the meme images from `poses/` |
+| `ui.py` | Everything drawn on screen, plus snapshot photos |
 
 ## Tests
 

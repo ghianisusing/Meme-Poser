@@ -201,10 +201,10 @@ footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line)
   <div class="phases">
     <div class="phase">
       <div class="phase-head"><span class="eyebrow">Phase 0</span><h3>Clean ground</h3><p>About a day</p></div>
-      <div class="card"><span class="tag t-base">Foundation</span><h3>Split the script into modules</h3><p><code>camera.py</code>, <code>detector.py</code>, <code>classifier.py</code>, <code>poses/</code>, <code>ui.py</code>, <code>main.py</code>.</p></div>
-      <div class="card"><span class="tag t-base">Foundation</span><h3>Fix the image-load crash</h3><p>Check <code>imread</code> before resizing and name the missing file.</p></div>
-      <div class="card"><span class="tag t-base">Foundation</span><h3>Config file</h3><p>Camera index, thresholds and hold time in <code>config.toml</code>.</p></div>
-      <div class="card"><span class="tag t-base">Foundation</span><h3>Fix the wording</h3><p>Change "COPY THE POSE" to something like "Strike a pose" and update the README.</p></div>
+      <div class="card"><span class="tag t-base">Foundation</span><h3>Split the script into modules <span class="tag t-base" style="color:var(--ok)">Built</span></h3><p><code>pose_detection.py</code>, <code>detection.py</code>, <code>pose_samples.py</code>, <code>library.py</code>, <code>ui.py</code>.</p></div>
+      <div class="card"><span class="tag t-base">Foundation</span><h3>Fix the image-load crash <span class="tag t-base" style="color:var(--ok)">Built</span></h3><p>Check <code>imread</code> before resizing and name the missing file.</p></div>
+      <div class="card"><span class="tag t-base">Foundation</span><h3>Settings file <span class="tag t-base" style="color:var(--ok)">Built</span></h3><p>Thresholds, hold time and record timings in <code>settings.py</code>.</p></div>
+      <div class="card"><span class="tag t-base">Foundation</span><h3>Fix the wording <span class="tag t-base" style="color:var(--ok)">Built</span></h3><p>Change "COPY THE POSE" to something like "Strike a pose" and update the README.</p></div>
     </div>
 
     <div class="phase">
@@ -227,7 +227,7 @@ footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line)
       <div class="phase-head"><span class="eyebrow">Phase 3</span><h3>Gallery and reveal</h3><p>About a week</p></div>
       <div class="card"><span class="tag t-ui">UI</span><h3>Pose gallery strip</h3><p>A row of small thumbnails of every meme in the library, always on screen, with each pose's name. Built from the pose folders, so a new meme shows up on its own.</p></div>
       <div class="card"><span class="tag t-ui">UI</span><h3>Gallery reacts to you</h3><p>The thumbnail of the pose you're closest to lights up while you hold it, and gets a check mark once you've found it this session.</p></div>
-      <div class="card"><span class="tag t-ui">UI</span><h3>Full gallery screen</h3><p>Press <code>g</code> (or <code>Tab</code>) to see every meme large, as a grid. Useful when the library grows past what fits in the strip.</p></div>
+      <div class="card"><span class="tag t-ui">UI</span><h3>Full gallery screen <span class="tag t-base" style="color:var(--ok)">Built</span></h3><p>Press <code>g</code> to see every meme large, as a grid. Useful when the library grows past what fits in the strip.</p></div>
       <div class="card"><span class="tag t-ui">UI</span><h3>Meme inside the camera view <span class="tag t-base" style="color:var(--ok)">Built</span></h3><p>Pop the meme into a corner of the same window, sized to the screen. Drop the floating OS window.</p></div>
       <div class="card"><span class="tag t-ui">UI</span><h3>"Almost" feedback <span class="tag t-base" style="color:var(--ok)">Built</span></h3><p>While you hold, show the pose name it thinks you're doing and a short fill bar, so the reveal feels earned.</p></div>
       <div class="card"><span class="tag t-ui">UI</span><h3>Pop-in animation <span class="tag t-base" style="color:var(--ok)">Built</span></h3><p>Scale and fade the meme in over ~200 ms, with the pose name as a caption. Optional sound.</p></div>
