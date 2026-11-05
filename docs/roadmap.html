@@ -220,7 +220,7 @@ footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line)
       <div class="card"><span class="tag t-detect">Recognition</span><h3>Pose library folders</h3><p>Each meme is a folder: <code>meme.png</code> plus recorded examples of the pose. Drop in a folder to add a meme.</p></div>
       <div class="card"><span class="tag t-detect">Recognition</span><h3>Record mode</h3><p>Press <code>r</code>, do the pose for a few seconds, and it saves 50–100 normalized samples into that meme's folder.</p></div>
       <div class="card"><span class="tag t-detect">Recognition</span><h3>Nearest-match classifier</h3><p>Compare your normalized body to every saved sample (k-nearest neighbours). Best pose wins, or "none" if all are too far. No training step, works with a handful of memes.</p></div>
-      <div class="card"><span class="tag t-detect">Recognition</span><h3>Confusion test</h3><p>Replay recorded samples and print which poses get mixed up, so you know which memes need more examples.</p></div>
+      <div class="card"><span class="tag t-detect">Recognition</span><h3>Mix-up check <span class="tag t-base" style="color:var(--ok)">Built</span></h3><p>Run <code>python check_poses.py</code> to replay recorded samples and print which poses get mixed up, so you know which memes need more examples.</p></div>
     </div>
 
     <div class="phase">
