@@ -4,7 +4,7 @@ Strike a pose in front of your webcam and get the meme that matches it.
 
 A gallery strip at the bottom of the camera window shows every meme pose you can try. The pose you match lights up, and poses you've found get a check mark.
 
-Hold a pose for half a second to reveal its meme. While you hold it, the screen says "HOLD IT..." and a bar fills up. The meme stays until you clearly break the pose.
+Hold a pose for half a second to reveal its meme. While you hold it, the screen says "HOLD IT..." and a bar fills up. The meme then pops into the top-right corner of the camera view and stays until you clearly break the pose. Press space while it's showing to save a photo of you next to the meme.
 
 ## Setup (Windows)
 
@@ -30,6 +30,8 @@ python face_detector.py    # face detection demo
 | Key | Action |
 | --- | --- |
 | `g` | Open or close the full gallery of all poses |
+| `Space` | Save a photo of you next to the meme (while a meme is showing) to `snapshots/` |
+| `s` | Show or hide your skeleton |
 | `r` | Record a pose (then press the pose's number) |
 | `Esc` | Cancel recording |
 | `q` | Quit |
