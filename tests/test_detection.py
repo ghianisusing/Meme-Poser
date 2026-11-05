@@ -10,8 +10,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pose_detection as pd  # noqa: E402
-from pose_detection import PL  # noqa: E402
+import detection as pd  # noqa: E402
+from detection import PL  # noqa: E402
 
 W, H = 640, 480
 

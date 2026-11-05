@@ -11,6 +11,8 @@ import os
 import mediapipe as mp
 import numpy as np
 
+from settings import SAMPLE_FAR, SAMPLE_NEAR
+
 PL = mp.solutions.pose.PoseLandmark
 
 # Body points used for matching recorded poses.
@@ -28,10 +30,9 @@ POINTS = (
 # they sit in the same place in every pose, so they'd only water down differences.
 COMPARE = [i for i, p in enumerate(POINTS) if p not in (PL.LEFT_SHOULDER, PL.RIGHT_SHOULDER)]
 
-# How close you need to be to a recorded example, as the average distance
-# per body point in shoulder widths. NEAR or closer scores 1, FAR or more scores 0.
-NEAR = 0.15
-FAR = 0.35
+# How close you need to be to a recorded example (see settings.py).
+NEAR = SAMPLE_NEAR
+FAR = SAMPLE_FAR
 NEAREST_COUNT = 3  # average over this many closest examples to ignore one-off noise
 
 

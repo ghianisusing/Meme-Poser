@@ -13,7 +13,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pose_detection as pd  # noqa: E402
+import ui as pd  # noqa: E402
 
 MEME = np.full((1080, 1920, 3), (40, 120, 200), np.uint8)
 
