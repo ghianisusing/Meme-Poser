@@ -45,6 +45,30 @@ The examples are saved to `poses/samples/dab.npy`. From then on the game recogni
 
 You can also write a scoring rule by hand for more control: add a function to `DETECTORS` in `detection.py` under the same name (`"dab": score_dab`). It gets a `Body` and returns a score from 0 (not this pose) to 1 (clearly this pose). See `score_hands_behind_head` for an example. If a pose has both a rule and recorded examples, the higher score counts.
 
+## Checking your poses
+
+Once you've recorded a few memes, check whether the game mixes any of them up:
+
+```powershell
+python check_poses.py
+```
+
+For each recorded pose it shows how often the game recognizes it, which other poses it could be mistaken for, and what to do about it:
+
+```
+Pose               Examples  Recognized  Mixed up with
+-----------------  --------  ----------  -------------
+arms_down                12     too few  -
+surprised_guy            40          0%  hands_behind_head (100%)
+hands_behind_head        92        100%  surprised_guy (100%)
+
+To improve:
+- arms_down: only 12 examples: record it again (press r)
+- surprised_guy: often looks like hands_behind_head: make the two poses more different, or record both again
+```
+
+Two memes with nearly the same pose will always get mixed up. Pick memes whose poses look clearly different.
+
 ## Tuning
 
 All settings are in `settings.py`: `HOLD_SECONDS` (how long to hold), `ENTER_SCORE` / `EXIT_SCORE` (how strict), `MIN_VISIBILITY`, `SMOOTHING`, the record and reveal timings, and `SAMPLE_NEAR` / `SAMPLE_FAR` (how closely you need to copy a recorded pose).
@@ -59,6 +83,7 @@ All settings are in `settings.py`: `HOLD_SECONDS` (how long to hold), `ENTER_SCO
 | `pose_samples.py` | Recorded pose examples and matching against them |
 | `library.py` | Loads the meme images from `poses/` |
 | `ui.py` | Everything drawn on screen, plus snapshot photos |
+| `check_poses.py` | Reports which recorded poses the game mixes up |
 
 ## Tests
 
