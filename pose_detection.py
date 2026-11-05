@@ -24,6 +24,10 @@ COUNTDOWN_SECONDS = 3  # time to get into the pose
 RECORD_SECONDS = 3  # time spent saving examples
 MIN_SAMPLES = 20  # fewer clear frames than this means the recording failed
 
+# Reveal and snapshot settings
+REVEAL_SECONDS = 0.25  # length of the meme pop-in animation
+SNAPSHOTS_DIR = os.path.join(SCRIPT_DIR, "snapshots")
+
 # Matching settings
 MIN_VISIBILITY = 0.5  # ignore body points MediaPipe isn't sure it can see
 ENTER_SCORE = 0.7  # score needed to start holding a pose
@@ -335,7 +339,10 @@ def draw_gallery_strip(frame, poses, matched, found, holding=None, ready=None, n
     if numbered:
         header = "Record which pose? Press its number (Esc to cancel)"
     else:
-        header = f"Poses you can try: {len(found)}/{len(names)} found   (g = gallery, r = record)"
+        keys = "g gallery  r record  s skeleton  space photo"
+        header = f"Poses you can try: {len(found)}/{len(names)} found   {keys}"
+        if cv2.getTextSize(header, FONT, 0.5, 1)[0][0] > w - pad * 2:
+            header = f"{len(found)}/{len(names)} found   {keys}"
     cv2.putText(frame, fit_text(header, w - pad * 2, 0.5), (pad, top + 17), FONT, 0.5, WHITE, 1, cv2.LINE_AA)
 
     total_w = len(names) * tile_w + (len(names) - 1) * pad
@@ -436,6 +443,72 @@ def draw_record_overlay(frame, image, name, phase, elapsed, count):
     cv2.putText(frame, "Esc to cancel", (20, h - 20), FONT, 0.5, WHITE, 1, cv2.LINE_AA)
 
 
+def scale_to_fit(image, max_w, max_h):
+    """Resize image to fit inside max_w x max_h, keeping its shape (no padding)."""
+    ih, iw = image.shape[:2]
+    scale = min(max_w / iw, max_h / ih)
+    size = (max(1, int(iw * scale)), max(1, int(ih * scale)))
+    return cv2.resize(image, size, interpolation=cv2.INTER_AREA)
+
+
+def draw_reveal(frame, image, name, elapsed):
+    """Pop the matched meme into the top-right of the camera view.
+    elapsed: seconds since the pose matched (drives the pop-in animation)."""
+    h, w = frame.shape[:2]
+    full = scale_to_fit(image, int(w * 0.42), int(h * 0.42))
+    t = min(1.0, max(0.0, elapsed / REVEAL_SECONDS))
+    ease = 1 - (1 - t) ** 3  # fast start, gentle stop
+    scale = 0.6 + 0.4 * ease
+
+    caption_h = 28
+    fh, fw = full.shape[:2]
+    cx = w - 16 - fw // 2  # center of the final position
+    cy = 70 + fh // 2
+
+    img = cv2.resize(full, (max(1, int(fw * scale)), max(1, int(fh * scale))), interpolation=cv2.INTER_AREA)
+    ih, iw = img.shape[:2]
+    x, y = cx - iw // 2, cy - ih // 2
+    x1, y1 = max(0, x), max(0, y)
+    x2, y2 = min(w, x + iw), min(h, y + ih)
+    if x2 <= x1 or y2 <= y1:
+        return
+    crop = img[y1 - y : y2 - y, x1 - x : x2 - x]
+    frame[y1:y2, x1:x2] = cv2.addWeighted(crop, ease, frame[y1:y2, x1:x2], 1 - ease, 0)
+
+    if t >= 1.0:
+        cv2.rectangle(frame, (x1 - 2, y1 - 2), (x2 + 1, y2 + 1), GREEN, 3)
+        cap_y2 = min(h, y2 + caption_h)
+        darken(frame, x1 - 2, y2 + 2, x2 + 2, cap_y2, 0.7)
+        text = fit_text(display_name(name), x2 - x1 - 10, 0.6, 2)
+        tw = cv2.getTextSize(text, FONT, 0.6, 2)[0][0]
+        cv2.putText(frame, text, (x1 + (x2 - x1 - tw) // 2, y2 + 21), FONT, 0.6, WHITE, 2, cv2.LINE_AA)
+
+
+def compose_snapshot(camera, image, name):
+    """You on the left, the meme on the right, the pose name underneath."""
+    h = camera.shape[0]
+    meme = scale_to_fit(image, int(camera.shape[1] * 1.5), h)
+    meme_box = np.zeros((h, max(meme.shape[1], h * 3 // 4), 3), np.uint8)
+    mx = (meme_box.shape[1] - meme.shape[1]) // 2
+    my = (h - meme.shape[0]) // 2
+    meme_box[my : my + meme.shape[0], mx : mx + meme.shape[1]] = meme
+
+    gap = np.zeros((h, 12, 3), np.uint8)
+    top = np.hstack([camera, gap, meme_box])
+    band = np.zeros((56, top.shape[1], 3), np.uint8)
+    text = f"Me as: {display_name(name)}"
+    tw = cv2.getTextSize(text, FONT, 0.9, 2)[0][0]
+    cv2.putText(band, text, ((top.shape[1] - tw) // 2, 38), FONT, 0.9, WHITE, 2, cv2.LINE_AA)
+    return np.vstack([top, band])
+
+
+def save_snapshot(camera, image, name, folder=SNAPSHOTS_DIR):
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f"{name}_{time.strftime('%Y%m%d_%H%M%S')}.png")
+    cv2.imwrite(path, compose_snapshot(camera, image, name))
+    return path
+
+
 def draw_message(frame, text, color):
     h, w = frame.shape[:2]
     darken(frame, 0, 80, w, 130, 0.7)
@@ -480,8 +553,8 @@ def main():
     tracker = PoseTracker()
     found = set()
     show_grid = False
-    popup_visible = False
-    popup_pose = None
+    show_skeleton = False
+    last_matched, match_start = None, 0.0
 
     # mode: "play", "choose" (picking a pose to record), "countdown" or "recording"
     mode = "play"
@@ -500,6 +573,7 @@ def main():
             break
 
         frame = cv2.flip(frame, 1)
+        camera = frame.copy()  # clean copy for snapshots
         h, w = frame.shape[:2]
         now = time.monotonic()
 
@@ -516,6 +590,8 @@ def main():
             progress = tracker.hold_progress(now)
             if matched:
                 found.add(matched)
+        if matched != last_matched:
+            last_matched, match_start = matched, now
 
         if mode == "countdown" and now - phase_start >= COUNTDOWN_SECONDS:
             mode, phase_start, recorded = "recording", now, []
@@ -549,27 +625,15 @@ def main():
                 cv2.rectangle(frame, (0, 0), (w - 1, h - 1), AMBER, 8)
                 cv2.putText(frame, "RECORD A POSE", (20, 45), FONT, 1, AMBER, 2, cv2.LINE_AA)
             else:
+                if show_skeleton and results.pose_landmarks:
+                    mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
                 draw_status(frame, matched, holding, progress)
             draw_gallery_strip(frame, poses, matched, found, holding, ready_poses(), numbered=mode == "choose")
+            if matched:
+                draw_reveal(frame, poses[matched], matched, now - match_start)
 
         if message and now < message_until:
             draw_message(frame, message, message_color)
-
-        # Meme popup for the matched pose
-        if matched:
-            if not popup_visible:
-                cv2.namedWindow("Your Meme", cv2.WINDOW_NORMAL)
-                cv2.resizeWindow("Your Meme", 480, 270)
-                cv2.moveWindow("Your Meme", 60, 80)
-                popup_visible = True
-            if matched != popup_pose:
-                popup_image = fit(poses[matched], 480, 270)
-                popup_pose = matched
-            cv2.imshow("Your Meme", popup_image)
-        elif popup_visible:
-            cv2.destroyWindow("Your Meme")
-            popup_visible = False
-            popup_pose = None
 
         cv2.imshow("Camera", frame)
 
@@ -579,6 +643,16 @@ def main():
         if mode == "play":
             if key == ord("g"):
                 show_grid = not show_grid
+            elif key == ord("s"):
+                show_skeleton = not show_skeleton
+            elif key == ord(" "):
+                if matched:
+                    path = save_snapshot(camera, poses[matched], matched)
+                    message = f"Photo saved: snapshots/{os.path.basename(path)}"
+                    message_color = GREEN
+                else:
+                    message, message_color = "Strike a pose first, then press space", AMBER
+                message_until = now + 3
             elif key == ord("r"):
                 if len(names) == 1:
                     start_countdown(names[0], now)
