@@ -1,5 +1,5 @@
-# Python 3.12 recommended (MediaPipe has no wheels for 3.13+ at these versions).
-# mediapipe is pinned below 0.10.30 because pose_detection.py uses mp.solutions,
-# which newer releases removed.
-mediapipe==0.10.21
-opencv-python<4.12
+# Works with Python 3.11 or newer (tested on 3.14).
+# MediaPipe brings its own OpenCV (opencv-contrib-python) and NumPy, so they
+# aren't listed separately. Don't also install opencv-python: two OpenCV
+# packages in one environment conflict.
+mediapipe==1.1.1

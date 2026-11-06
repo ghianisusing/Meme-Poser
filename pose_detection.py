@@ -8,11 +8,11 @@ import sys
 import time
 
 import cv2
-import mediapipe as mp
 
 import pose_samples
 from detection import DETECTORS, PoseTracker, score_poses
 from library import display_name, load_poses
+from pose_model import PoseDetector, ensure_model
 from settings import (
     COUNTDOWN_SECONDS,
     MIN_SAMPLES,
@@ -31,14 +31,11 @@ from ui import (
     draw_message,
     draw_record_overlay,
     draw_reveal,
+    draw_skeleton,
     draw_status,
     put_text,
     save_snapshot,
 )
-
-mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
-
 
 # -----------------------------
 # Main loop
@@ -58,21 +55,17 @@ def main():
     def ready_poses():
         return {name for name in poses if name in DETECTORS or name in samples}
 
+    pose = PoseDetector(ensure_model())  # downloads the model on first run
+
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("Could not access webcam.")
+        pose.close()
         sys.exit(1)
 
     cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Camera", 1280, 800)
     cv2.moveWindow("Camera", 0, 0)
-
-    pose = mp_pose.Pose(
-        static_image_mode=False,
-        model_complexity=1,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
-    )
 
     names = list(poses)
     tracker = PoseTracker()
@@ -102,8 +95,7 @@ def main():
         h, w = frame.shape[:2]
         now = time.monotonic()
 
-        results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        landmarks = results.pose_landmarks.landmark if results.pose_landmarks else None
+        landmarks = pose.detect(frame, now)
 
         matched, holding, progress = None, None, 0.0
         if mode == "play":
@@ -139,8 +131,8 @@ def main():
                 tracker = PoseTracker()
 
         if mode in ("countdown", "recording"):
-            if results.pose_landmarks:
-                mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+            if landmarks:
+                draw_skeleton(frame, landmarks, MIN_VISIBILITY)
             draw_record_overlay(frame, poses[record_pose], record_pose, mode, now - phase_start, len(recorded) if mode == "recording" else 0)
         elif show_grid:
             draw_gallery_grid(frame, poses, matched, found, holding, ready_poses())
@@ -150,8 +142,8 @@ def main():
                 cv2.rectangle(frame, (0, 0), (w - 1, h - 1), AMBER, 8)
                 put_text(frame, "RECORD A POSE", (20, 45), 1, AMBER, 2)
             else:
-                if show_skeleton and results.pose_landmarks:
-                    mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+                if show_skeleton and landmarks:
+                    draw_skeleton(frame, landmarks, MIN_VISIBILITY)
                 draw_status(frame, matched, holding, progress)
             draw_gallery_strip(frame, poses, matched, found, holding, ready_poses(), numbered=mode == "choose")
             if matched:

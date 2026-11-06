@@ -16,6 +16,10 @@ MIN_SAMPLES = 20  # fewer clear frames than this means the recording failed
 REVEAL_SECONDS = 0.25  # length of the meme pop-in animation
 SNAPSHOTS_DIR = os.path.join(SCRIPT_DIR, "snapshots")
 
+# Pose model, downloaded on first run (the "full" model, about 9 MB)
+MODEL_PATH = os.path.join(SCRIPT_DIR, "models", "pose_landmarker_full.task")
+MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"
+
 # Matching settings
 MIN_VISIBILITY = 0.5  # ignore body points MediaPipe isn't sure it can see
 ENTER_SCORE = 0.7  # score needed to start holding a pose
