@@ -8,22 +8,25 @@ Hold a pose for half a second to reveal its meme. While you hold it, the screen 
 
 ## Setup (Windows)
 
-Needs Python 3.12.
+Needs Python 3.11 or newer.
 
 ```powershell
-py -3.12 -m venv .venv
+py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-On macOS/Linux, use `python3.12 -m venv .venv` and `source .venv/bin/activate`.
+On macOS/Linux, use `python3 -m venv .venv` and `source .venv/bin/activate`.
+
+**Upgrading from an older setup** (MediaPipe 0.10 / Python 3.12): delete the `.venv` folder and run the steps above again. Installing on top of the old environment leaves two OpenCV packages side by side, and they conflict.
 
 ## Run
 
 ```powershell
-python pose_detection.py   # pose matcher
-python face_detector.py    # face detection demo
+python pose_detection.py
 ```
+
+The first run downloads MediaPipe's pose model (about 9 MB) into `models/`. After that it starts straight away and works offline.
 
 ## Controls
 
@@ -79,6 +82,7 @@ All settings are in `settings.py`: `HOLD_SECONDS` (how long to hold), `ENTER_SCO
 | --- | --- |
 | `pose_detection.py` | Runs the game: camera, keys, and switching between play and record mode |
 | `settings.py` | Every setting you can tune |
+| `pose_model.py` | Downloads the pose model and finds body points with MediaPipe |
 | `detection.py` | Hand-written pose rules and the hold timer |
 | `pose_samples.py` | Recorded pose examples and matching against them |
 | `library.py` | Loads the meme images from `poses/` |

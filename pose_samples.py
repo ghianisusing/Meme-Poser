@@ -8,12 +8,10 @@ poses/samples/<pose name>.npy.
 
 import os
 
-import mediapipe as mp
 import numpy as np
 
+from pose_model import PL
 from settings import SAMPLE_FAR, SAMPLE_NEAR
-
-PL = mp.solutions.pose.PoseLandmark
 
 # Body points used for matching recorded poses.
 POINTS = (

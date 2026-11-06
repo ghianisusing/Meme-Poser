@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from library import display_name
+from pose_model import POSE_CONNECTIONS
 from settings import COUNTDOWN_SECONDS, RECORD_SECONDS, REVEAL_SECONDS, SNAPSHOTS_DIR
 
 # Colors (BGR)
@@ -319,6 +320,25 @@ def save_snapshot(camera, image, name, folder=SNAPSHOTS_DIR):
     path = os.path.join(folder, f"{name}_{time.strftime('%Y%m%d_%H%M%S')}.png")
     cv2.imwrite(path, compose_snapshot(camera, image, name))
     return path
+
+
+def draw_skeleton(frame, landmarks, min_visibility=0.5):
+    """Draw the body points and the lines between them."""
+    h, w = frame.shape[:2]
+
+    def point(i):
+        p = landmarks[i]
+        if p.visibility < min_visibility:
+            return None
+        return (int(p.x * w), int(p.y * h))
+
+    pts = [point(i) for i in range(len(landmarks))]
+    for a, b in POSE_CONNECTIONS:
+        if pts[a] and pts[b]:
+            cv2.line(frame, pts[a], pts[b], WHITE, 2, cv2.LINE_AA)
+    for p in pts:
+        if p:
+            cv2.circle(frame, p, 4, RED, -1, cv2.LINE_AA)
 
 
 def draw_message(frame, text, color):
